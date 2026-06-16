@@ -2,41 +2,26 @@ import serial
 import re
 import time
 
-# Change COM port
-PORT = "COM3"
+# ==========================
+# Configuration
+# ==========================
+PORT = "COM7"
+BAUD_RATE = 9600
 
-ser = serial.Serial(PORT, 9600)
+LYRICS_FILE = r"D:\Arduino&gestureProject\githubrepo\theengineerszone_projects\projects\Arduino\lcd_song_sync_arduino\love_me_not_lyrics.txt"
 
-# Wait for Arduino reset
+# ==========================
+# Connect to Arduino
+# ==========================
+ser = serial.Serial(PORT, BAUD_RATE)
 time.sleep(2)
-def format_for_lcd(text):
 
-    words = text.split()
-
-    line1 = ""
-    line2 = ""
-
-    for word in words:
-
-        if len(line1) == 0:
-            candidate = word
-        else:
-            candidate = line1 + " " + word
-
-        if len(candidate) <= 16:
-            line1 = candidate
-        else:
-
-            if len(line2) == 0:
-                line2 = word
-            else:
-                line2 += " " + word
-
-    return line1, line2
-
+# ==========================
+# Parse Lyrics
+# ==========================
 lyrics = []
 
-with open("projects/Arduino/lcd_song_sync_arduino/lyrics.txt", "r", encoding="utf-8") as f:
+with open(LYRICS_FILE, "r", encoding="utf-8") as f:
 
     for line in f:
 
@@ -59,29 +44,59 @@ with open("projects/Arduino/lcd_song_sync_arduino/lyrics.txt", "r", encoding="ut
                 (timestamp, text)
             )
 
-print("Lyrics loaded:")
-#print(lyrics)
+print(f"Loaded {len(lyrics)} lyric lines")
 
+# ==========================
+# Start Synchronization
+# ==========================
 start_time = time.time()
 
-current_index = 0
+for i in range(len(lyrics)):
 
-while current_index < len(lyrics):
+    current_timestamp, text = lyrics[i]
 
-    elapsed = time.time() - start_time
+    # Skip blank lyric lines
+    if not text:
+        continue
 
-    timestamp, text = lyrics[current_index]
+    # Remove punctuation
+    text = re.sub(r"[^\w\s']", "", text)
 
-    if elapsed >= timestamp:
+    words = text.split()
 
-        line1, line2 = format_for_lcd(text)
+    if not words:
+        continue
 
-        message = f"{line1}|{line2}\n"
-        print(f"At {elapsed:.2f}s: {message.strip()}")
+    # Calculate duration until next lyric line
+    if i < len(lyrics) - 1:
+        next_timestamp = lyrics[i + 1][0]
+        duration = next_timestamp - current_timestamp
+    else:
+        duration = len(words) * 0.5
+
+    # Prevent division by zero
+    duration = max(duration, 0.2)
+
+    delay_per_word = duration / len(words)
+
+    # Wait until lyric timestamp arrives
+    while time.time() - start_time < current_timestamp:
+        time.sleep(0.005)
+
+    # Display each word
+    for word in words:
+
+        # Send word to Arduino
+        message = f"{word}|\n"
+
+        print(
+            f"{time.time()-start_time:.2f}s -> {word}"
+        )
+
         ser.write(message.encode())
 
-        current_index += 1
+        time.sleep(delay_per_word)
 
-    time.sleep(0.05)
+print("Lyrics Finished!")
 
-print("Finished")
+ser.close()
