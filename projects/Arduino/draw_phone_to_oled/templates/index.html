@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OLED Drawing Pad</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        #toolbar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <button onclick="clearCanvas()">Clear</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+resizeCanvas();
+
+window.addEventListener("resize", resizeCanvas);
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+
+ctx.lineWidth = 3;
+ctx.lineCap = "round";
+ctx.strokeStyle = "black";
+
+let drawing = false;
+let lastX = 0;
+let lastY = 0;
+
+function startDrawing(x, y) {
+    drawing = true;
+    lastX = x;
+    lastY = y;
+}
+
+function draw(x, y) {
+
+    if (!drawing) return;
+
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    sendLine(lastX, lastY, x, y);
+
+    lastX = x;
+    lastY = y;
+}
+
+function stopDrawing() {
+    drawing = false;
+}
+
+async function sendLine(x1, y1, x2, y2) {
+
+    try {
+
+        await fetch("/draw", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                x1,
+                y1,
+                x2,
+                y2,
+                width: canvas.width,
+                height: canvas.height
+            })
+        });
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function clearCanvas() {
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    try {
+        await fetch("/clear", {
+            method: "POST"
+        });
+    }
+    catch(err) {
+        console.error(err);
+    }
+}
+
+/* Mouse Support */
+
+canvas.addEventListener("mousedown", e => {
+    startDrawing(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener("mousemove", e => {
+    draw(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener("mouseup", stopDrawing);
+canvas.addEventListener("mouseleave", stopDrawing);
+
+/* Touch Support */
+
+canvas.addEventListener("touchstart", e => {
+
+    e.preventDefault();
+
+    const touch = e.touches[0];
+
+    startDrawing(
+        touch.clientX,
+        touch.clientY
+    );
+
+});
+
+canvas.addEventListener("touchmove", e => {
+
+    e.preventDefault();
+
+    const touch = e.touches[0];
+
+    draw(
+        touch.clientX,
+        touch.clientY
+    );
+
+});
+
+canvas.addEventListener("touchend", stopDrawing);
+
+</script>
+
+</body>
+</html>
